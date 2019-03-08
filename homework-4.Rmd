@@ -58,25 +58,39 @@ inTraining <- createDataPartition(df$medv, p = .75, list = F)
 training <- df[inTraining, ]
 testing  <- df[-inTraining, ]
 
-results <- data_frame(ntree = seq(25, 500, by = 1),
-                      mtry = rep(NA, length(ntree)),
-                      RMSE = rep(NA, length(ntree)))
+results <- data_frame(ntree = seq(25, 500, by = 25),
+                      mtry_3 = rep(NA, length(ntree)),
+                      mtry_4 = rep(NA, length(ntree)),
+                      mtry_5 = rep(NA, length(ntree)),
+                      mtry_6 = rep(NA, length(ntree)),
+                      mtry_7 = rep(NA, length(ntree)),
+                      mtry_8 = rep(NA, length(ntree)),
+                      mtry_9 = rep(NA, length(ntree)))
 
-for (i in seq(25,500,50)){
+for (i in 1:20){
 rf_boston_cv <- train(medv~., 
                       data = training,
                       method = "rf",
-                      ntree = ntree[i],
+                      ntree = results$ntree[i],
                       importance = T,
                       tuneGrid = data.frame(mtry = 3:9))
-results[i] <- rf_boston_cv$results$RMSE^2}
+results[i, 2:8] <- rf_boston_cv$results$RMSE^2}
 
-p <- ggplot(data = results, aes(x = ntrees, y = mse, col = as.factor(mttry)))
-p + geom_point() +
-  geom_line() +
-  scale_color_brewer('mtry', palette = "Dark2")
 ```
 
+```{r}
+ggplot(data = results, 
+            aes(x = ntree)) + 
+  geom_line(aes(y = mtry_3), color = "black")+
+  geom_line(aes(y = mtry_4), color = "blue") +
+  geom_line(aes(y = mtry_5), color = "orange")+
+  geom_line(aes(y = mtry_6), color = "yellow")+
+  geom_line(aes(y = mtry_7), color = "green")+
+  geom_line(aes(y = mtry_8), color = "purple")+
+  geom_line(aes(y = mtry_9), color = "red")+
+  ylab(label="Test Error Rate") + 
+  xlab("Number of Trees")
+```
 
 ## Problem 2
 
@@ -173,41 +187,41 @@ grid <- expand.grid(interaction.depth = c(1, 3),
                     shrinkage = c(.01, 0.001),
                     n.minobsinnode = 10)
 trainControl <- trainControl(method = "cv", number = 5)
-gbm_boston <- train(medv ~ ., 
+gbm_Carseats <- train(Sales~., 
                     data = training, 
                     distribution = "gaussian", 
                     method = "gbm",
                     trControl = trainControl, 
                     tuneGrid = grid,
                     verbose = FALSE)
-gbm_boston
+gbm_Carseats
 ```
 ```{r}
-test_preds <- predict(gbm_boston, newdata = testing)
-boston_test_df <- boston_test_df %>%
+test_preds <- predict(gbm_Carseats, newdata = testing)
+carseats_test_df <- testing %>%
   mutate(y_hat_gbm = test_preds,
-         sq_err_gbm = (y_hat_gbm - medv)^2)
-mean(boston_test_df$sq_err_gbm)
+         sq_err_gbm = (y_hat_gbm - Sales)^2)
+mean(carseats_test_df$sq_err_gbm)
 ```
 
 2. Fit a multiple regression model to the training data and report the 
 estimated test MSE
 ```{r}
-lm_boston <- lm(medv ~ ., data = training)
+lm_carseats <- lm(Sales ~ ., data = training)
 ```
 ```{r}
-test_preds <- predict(lm_boston, newdata = testing)
-boston_test_df <- boston_test_df %>%
+test_preds <- predict(lm_carseats, newdata = testing)
+carseats_test_df <- testing %>%
   mutate(y_hat_gbm = test_preds,
-         sq_err_gbm = (y_hat_gbm - medv)^2)
-mean(boston_test_df$sq_err_gbm)
+         sq_err_gbm = (y_hat_gbm - Sales)^2)
+mean(carseats_test_df$sq_err_gbm)
 ```
 
 3. Summarize your results. 
 ```{r}
-summary(gbm_boston)
+summary(gbm_Carseats)
 ```
 ```{r}
-summary(lm_boston)
+summary(lm_carseats)
 ```
 

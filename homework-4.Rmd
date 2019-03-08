@@ -1,6 +1,6 @@
 ---
 title: 'Homework 4: Bags, Forests, Boosts, oh my'
-author: "Your Name Goes Here"
+author: "Skylar White"
 date: "2/28/2019"
 output: github_document
 ---
@@ -9,12 +9,74 @@ output: github_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(ISLR)
+library(tree)
+library(caret)
+library(stringr)
+library(rpart)
+library(rpart.plot)
+library(partykit)
+theme_set(theme_bw())
+theme_set(theme_bw())
+```
+
 ## Problem 1
 
 Problem 7 from Chapter 8 in the text. To be specific, please use a sequence of
 `ntree` from 25 to 500 in steps of 25 and `mtry` from 3 to 9 for by 1. 
 
+In the lab, we applied random forests to the Boston data using mtry=6
+and using ntree=25 and ntree=500. Create a plot displaying the test
+error resulting from random forests on this data set for a more comprehensive range of values for mtry and ntree. You can model your
+plot after Figure 8.10. Describe the results obtained.
 ## Answer 1
+```{r}
+library(MASS)
+library(randomForest)
+set.seed(1)
+train = sample(1:nrow(Boston), nrow(Boston)/2)
+boston.test=Boston[-train,"medv"]
+```
+
+```{r}
+set.seed(1)
+rf.boston= randomForest(medv~.,data=Boston, subset=train,
+mtry=6, importance =TRUE)
+yhat.rf = predict(rf.boston ,newdata=Boston[-train,])
+mean((yhat.rf-boston.test)^2)
+```
+```{r}
+rf.boston
+```
+```{r}
+set.seed(1234)
+df <- tbl_df(Boston)
+inTraining <- createDataPartition(df$medv, p = .75, list = F)
+training <- df[inTraining, ]
+testing  <- df[-inTraining, ]
+
+results <- data_frame(ntree = seq(25, 500, by = 1),
+                      mtry = rep(NA, length(ntree)),
+                      RMSE = rep(NA, length(ntree)))
+
+for (i in seq(25,500,50)){
+rf_boston_cv <- train(medv~., 
+                      data = training,
+                      method = "rf",
+                      ntree = ntree[i],
+                      importance = T,
+                      tuneGrid = data.frame(mtry = 3:9))
+results[i] <- rf_boston_cv$results$RMSE^2}
+
+p <- ggplot(data = results, aes(x = ntrees, y = mse, col = as.factor(mttry)))
+p + geom_point() +
+  geom_line() +
+  scale_color_brewer('mtry', palette = "Dark2")
+```
+
 
 ## Problem 2
 
@@ -27,3 +89,125 @@ test MSE.
 2. Fit a multiple regression model to the training data and report the 
 estimated test MSE
 3. Summarize your results. 
+
+In the lab, a classification tree was applied to the Carseats data set after converting Sales into a qualitative response variable. Now we will
+seek to predict Sales using regression trees and related approaches,
+treating the response as a quantitative variable.
+(a) Split the data set into a training set and a test set.
+```{r}
+set.seed(9823)
+df <- tbl_df(Carseats)
+train <- sample(1:nrow(Carseats), nrow(Carseats) / 2)
+training <- Carseats[train, ]
+testing <- Carseats[-train, ]
+```
+
+(b) Fit a regression tree to the training set. Plot the tree, and interpret the results. What test error rate do you obtain?
+```{r}
+carseats_tree <- tree(Sales ~ ., data = training)
+summary(carseats_tree)
+```
+```{r}
+plot(carseats_tree)
+text(carseats_tree, pretty = 0)
+```
+
+```{r}
+yhat <- predict(carseats_tree, newdata = testing)
+mean((yhat - testing$Sales)^2)
+```
+
+(c) Use cross-validation in order to determine the optimal level of
+tree complexity. Does pruning the tree improve the test error
+rate?
+```{r}
+cv_carseats <- cv.tree(carseats_tree)
+plot(cv_carseats$size, cv_carseats$dev, type = "b")
+tree.min <- which.min(cv_carseats$dev)
+```
+```{r}
+prune_carseats <- prune.tree(carseats_tree, best = 8)
+plot(prune_carseats)
+text(prune_carseats, pretty = 0)
+```
+```{r}
+yhat <- predict(prune_carseats, newdata = testing)
+mean((yhat - testing$Sales)^2)
+```
+No, it increases it.
+
+(d) Use the bagging approach in order to analyze this data. What
+test error rate do you obtain? Use the importance() function to
+determine which variables are most important.
+334 8. Tree-Based Methods
+
+```{r}
+bag_carseats <- randomForest(Sales ~ ., data = training, mtry = 10, ntree = 500, importance = TRUE)
+yhat_bag <- predict(bag_carseats, newdata = testing)
+mean((yhat_bag - testing$Sales)^2)
+```
+```{r}
+importance(bag_carseats)
+```
+
+(e) Use random forests to analyze this data. What test error rate do
+you obtain? Use the importance() function to determine which
+variables are most important. Describe the effect of m, the number of variables considered at each split, on the error rate
+obtained.
+```{r}
+rf_carseats <- randomForest(Sales ~ ., data = training, mtry = 3, ntree = 500, importance = TRUE)
+yhat_rf <- predict(rf_carseats, newdata = testing)
+mean((yhat_rf - testing$Sales)^2)
+```
+Having m= root(p) makes the error rate relatively high compared with bagging.
+
+```{r}
+importance(rf_carseats)
+```
+1. Fit a gradient-boosted tree to the training data and report the estimated 
+test MSE. 
+```{r}
+set.seed(9823)
+grid <- expand.grid(interaction.depth = c(1, 3), 
+                    n.trees = seq(0, 2000, by = 100),
+                    shrinkage = c(.01, 0.001),
+                    n.minobsinnode = 10)
+trainControl <- trainControl(method = "cv", number = 5)
+gbm_boston <- train(medv ~ ., 
+                    data = training, 
+                    distribution = "gaussian", 
+                    method = "gbm",
+                    trControl = trainControl, 
+                    tuneGrid = grid,
+                    verbose = FALSE)
+gbm_boston
+```
+```{r}
+test_preds <- predict(gbm_boston, newdata = testing)
+boston_test_df <- boston_test_df %>%
+  mutate(y_hat_gbm = test_preds,
+         sq_err_gbm = (y_hat_gbm - medv)^2)
+mean(boston_test_df$sq_err_gbm)
+```
+
+2. Fit a multiple regression model to the training data and report the 
+estimated test MSE
+```{r}
+lm_boston <- lm(medv ~ ., data = training)
+```
+```{r}
+test_preds <- predict(lm_boston, newdata = testing)
+boston_test_df <- boston_test_df %>%
+  mutate(y_hat_gbm = test_preds,
+         sq_err_gbm = (y_hat_gbm - medv)^2)
+mean(boston_test_df$sq_err_gbm)
+```
+
+3. Summarize your results. 
+```{r}
+summary(gbm_boston)
+```
+```{r}
+summary(lm_boston)
+```
+
